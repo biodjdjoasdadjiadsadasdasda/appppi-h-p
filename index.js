@@ -5,7 +5,7 @@ const http = require("http")
 const TOKEN = process.env.DISCORD_TOKEN
 
 const API = "https://apihop-test-9hcq.onrender.com/push"
-const API_ID = "69ow6krx5wm"
+const API_ID = "2bcbf4f96454"
 
 const channels = {
   "1450081431932899368": "full_moon",
