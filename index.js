@@ -75,32 +75,38 @@ let ws
 let hb
 
 const connect = () => {
-
+  console.log("🔄 Đang kết nối tới Discord Gateway...")
+  
   ws = new WebSocket(
     "wss://gateway.discord.gg/?v=10&encoding=json"
   )
 
-  ws.on("message", async raw => {
+  ws.on("open", () => {
+    console.log("✅ WebSocket đã mở kết nối!")
+  })
 
+  ws.on("message", async raw => {
     let data
 
     try{
-
       data = JSON.parse(raw.toString())
-
     }catch{
-
       return
+    }
 
+    // Log tất cả event để debug
+    if(data.t && data.t !== "MESSAGE_CREATE") {
+      console.log(`📡 Event: ${data.t}`)
     }
 
     if(data.op === 10){
-
+      console.log("🎯 Nhận OP10, đang gửi identify...")
+      
       ws.send(JSON.stringify({
         op: 2,
         d: {
           token: TOKEN,
-          intents: 34305,
+          intents: 34305,  // ĐÃ SỬA - BAO GỒM MESSAGE CONTENT
           properties: {
             os: "Windows",
             browser: "Chrome",
@@ -116,37 +122,37 @@ const connect = () => {
       }))
 
       hb = setInterval(() => {
-
         if(ws.readyState === 1){
-
           ws.send(JSON.stringify({
             op: 1,
             d: null
           }))
-
         }
-
       }, data.d.heartbeat_interval)
 
+      console.log("✅ Đã gửi identify, chờ tin nhắn...")
       return
-
     }
 
     if(data.op === 9){
-
-      console.log("invalid discord token")
-
+      console.log("❌ INVALID DISCORD TOKEN! Token sai hoặc hết hạn!")
       process.exit()
-
     }
 
     if(data.t !== "MESSAGE_CREATE") return
 
+    // ===== NHẬN ĐƯỢC TIN NHẮN =====
+    console.log("=".repeat(60))
+    console.log("📨 NHẬN ĐƯỢC TIN NHẮN!")
+    
     const m = data.d
+    console.log(`📌 Channel ID: ${m.channel_id}`)
+    console.log(`📝 Nội dung: ${m.content ? m.content.substring(0, 200) : "(Không có text)"}`)
 
     let text = m.content ? m.content : ""
     
     if (m.embeds && m.embeds.length > 0) {
+      console.log(`📎 Có ${m.embeds.length} embed`)
       const embedTexts = m.embeds.map(e => {
         let parts = []
         if (e.title) parts.push(e.title)
@@ -164,38 +170,45 @@ const connect = () => {
     }
 
     const boss = channels[m.channel_id]
-
-    if(!boss) return
+    if(!boss) {
+      console.log(`❌ Bỏ qua - Channel ${m.channel_id} không được cấu hình`)
+      console.log(`📋 Các channel được cấu hình: ${Object.keys(channels).join(", ")}`)
+      return
+    }
+    console.log(`✅ Boss: ${boss}`)
 
     const job = getJobId(text)
+    if(!job) {
+      console.log(`❌ Không tìm thấy Job ID trong tin nhắn`)
+      return
+    }
+    console.log(`✅ Job ID: ${job}`)
 
-    if(!job) return
-
-    if(pushed.has(job)) return
+    if(pushed.has(job)) {
+      console.log(`⚠️ Job ${job} đã được xử lý trong 30 giây qua, bỏ qua`)
+      return
+    }
 
     pushed.set(job, 1)
-
     setTimeout(() => {
-
       pushed.delete(job)
-
     }, 30000)
 
     const { players, sea } = parseExtra(text)
+    console.log(`👥 Players: ${players}, 🌊 Sea: ${sea}`)
     
     // Encode job id trước khi gửi
     const encodedJob = encodeJobId(job)
     
-    console.log(`Original job: ${job}`)
-    console.log(`Encoded job: ${encodedJob}`)
+    console.log(`🔐 Original job: ${job}`)
+    console.log(`🔐 Encoded job: ${encodedJob}`)
 
     try{
-
-      await axios.post(
+      const response = await axios.post(
         API,
         {
           id: API_ID,
-          job: encodedJob,  // Gửi job đã encode
+          job: encodedJob,
           boss,
           players,
           sea
@@ -208,49 +221,47 @@ const connect = () => {
         }
       )
       
-      console.log(`Đã gửi thành công: ${boss} - ${encodedJob}`)
+      console.log(`✅ Đã gửi thành công: ${boss} - ${encodedJob}`)
+      console.log(`📡 API response: ${response.status}`)
 
     } catch(error) {
-      console.log(`Lỗi khi gửi: ${error.message}`)
+      console.log(`❌ Lỗi khi gửi API: ${error.message}`)
     }
-
+    console.log("=".repeat(60))
   })
 
-  ws.on("close", () => {
-
+  ws.on("close", (code, reason) => {
+    console.log(`❌ WebSocket đóng! Code: ${code}, Reason: ${reason || "Không rõ"}`)
     clearInterval(hb)
-
+    console.log("🔄 Thử kết nối lại sau 5 giây...")
     setTimeout(connect, 5000)
-
   })
 
   ws.on("error", (err) => {
-    console.log(`WebSocket error: ${err.message}`)
+    console.log(`⚠️ WebSocket lỗi: ${err.message}`)
   })
-
 }
 
 if(!TOKEN){
-
-  console.log("missing DISCORD_TOKEN")
-
-}else{
-
+  console.log("❌ THIẾU DISCORD_TOKEN! Thêm environment variable DISCORD_TOKEN")
+  console.log("💡 Hướng dẫn: Render Dashboard → Environment Variables → Thêm DISCORD_TOKEN")
+} else {
+  console.log(`✅ Token đã được cấu hình (${TOKEN.substring(0, 20)}...)`)
   connect()
-
 }
 
-// Thêm self-ping để giữ awake
+// Self-ping để giữ awake
 setInterval(() => {
   http.get(`http://localhost:${process.env.PORT || 3000}`, (res) => {
-    console.log('Self-ping thành công')
+    console.log('💓 Self-ping thành công')
   }).on('error', (err) => {
-    console.log('Self-ping lỗi:', err.message)
+    console.log('⚠️ Self-ping lỗi:', err.message)
   })
 }, 280000)
 
-http.createServer((req,res)=>{
-
+http.createServer((req, res) => {
   res.end("Inited")
-
 }).listen(process.env.PORT || 3000)
+
+console.log("🚀 Bot đã khởi động! Đang chờ tin nhắn...")
+console.log(`📋 Theo dõi các channel: ${Object.keys(channels).join(", ")}`)
