@@ -100,7 +100,7 @@ const connect = () => {
         op: 2,
         d: {
           token: TOKEN,
-          intents: 33281,
+          intents: 34305,
           properties: {
             os: "Windows",
             browser: "Chrome",
